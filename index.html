@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>DILLA COMEL</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        background: #000000;
+        overflow: hidden;
+        font-family: "Segoe UI", system-ui, sans-serif;
+      }
+
+      #app {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+      }
+
+      /* Canvas Three.js — layer paling atas, transparan agar video di baliknya (jika dipakai) tetap hitam pekat */
+      #three-canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 2;
+      }
+
+      /* Camera bubble: terlihat DAN tetap berfungsi sebagai source frame untuk MediaPipe.
+       Tidak ada konflik — video element yang sama bisa dipakai untuk display dan untuk
+       HandLandmarker.detectForVideo() secara bersamaan, karena keduanya hanya MEMBACA
+       frame video, bukan memodifikasinya. */
+      #camera-video {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        z-index: 10;
+        width: 200px;
+        height: 150px;
+        object-fit: cover;
+        border-radius: 16px;
+        border: 2px solid rgba(77, 225, 255, 0.5);
+        box-shadow: 0 0 24px rgba(77, 225, 255, 0.35);
+        transform: scaleX(-1); /* mirror selfie-view */
+        background: #000;
+      }
+
+      #status-overlay {
+        position: absolute;
+        bottom: 16px;
+        left: 16px;
+        z-index: 10;
+        color: #4de1ff;
+        font-size: 12px;
+        letter-spacing: 0.05em;
+        opacity: 0.7;
+        pointer-events: none;
+        text-shadow: 0 0 8px rgba(77, 225, 255, 0.6);
+      }
+
+      #loading-overlay {
+        position: absolute;
+        inset: 0;
+        z-index: 20;
+        background: #000;
+        color: #4de1ff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        letter-spacing: 0.1em;
+        transition: opacity 0.5s ease;
+      }
+
+      #loading-overlay.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      #permission-error {
+        position: absolute;
+        inset: 0;
+        z-index: 30;
+        background: rgba(0, 0, 0, 0.95);
+        color: #ff6b6b;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 24px;
+        font-size: 14px;
+        line-height: 1.6;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <video id="camera-video" playsinline autoplay muted></video>
+      <canvas id="three-canvas"></canvas>
+      <div id="status-overlay">INIT...</div>
+      <div id="loading-overlay">SABAR YAA DILLA CANTIK LAGI LOADING...</div>
+      <div id="permission-error">
+        Akses kamera ditolak atau tidak tersedia.<br />
+        Idupin kamera duluu yaa dillaa...
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

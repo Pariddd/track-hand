@@ -1,0 +1,19 @@
+{
+  "name": "particle-hand-tracking",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "postinstall": "chmod +x ./node_modules/.bin/*"
+  },
+  "dependencies": {
+    "three": "0.170.0",
+    "@mediapipe/tasks-vision": "0.10.17",
+    "gsap": "3.12.5"
+  },
+  "devDependencies": {
+    "vite": "5.4.10"
+  }
+}

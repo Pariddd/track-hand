@@ -33,7 +33,10 @@ export class ParticleSystem {
 
     this.shapes = {
       planet: generatePlanetPositions(this.count),
-      text: generateTextPositions(this.count, "LOVE U DILLA <3"),
+      text: generateTextPositions(
+        this.count,
+        "Semangat Dilla\nPPL sama KPM-nya yaa\nkalo cape inget Farid yaa\nwkwkw\nLOVE YOU CANTIKKK <3",
+      ),
       heart: generateHeartPositions(this.count),
       scatter: generateScatterPositions(this.count),
       flower: flowerData.positions,
@@ -217,13 +220,21 @@ export class ParticleSystem {
       duration: 0.6,
       ease: "sine.inOut",
     });
+    const isText = shapeName === "text";
     gsap.to(this.material.uniforms.uWaveAmount, {
-      value: shapeName === "text" ? 0.04 : 0,
+      value: isText ? 0.012 : 0,
       duration: 0.6,
       ease: "sine.inOut",
     });
     gsap.to(this.material.uniforms.uTurbulenceAmount, {
-      value: shapeName === "scatter" ? 3.5 : 1.0,
+      value: shapeName === "scatter" ? 3.5 : isText ? 0.25 : 1.0,
+      duration: 0.6,
+      ease: "sine.inOut",
+    });
+    gsap.to(this.material.uniforms.uBaseSize, {
+      value: isText
+        ? Config.particles.BASE_SIZE * 1.3
+        : Config.particles.BASE_SIZE,
       duration: 0.6,
       ease: "sine.inOut",
     });

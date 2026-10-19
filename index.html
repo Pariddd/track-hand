@@ -104,38 +104,327 @@
         font-size: 14px;
         line-height: 1.6;
       }
+      :root {
+        --music-glass: rgba(6, 12, 20, 0.62);
+        --music-cyan: #4de1ff;
+        --music-blush: #ff8fc1;
+        --music-frost: #eef7ff;
+        --music-mist: #9fb6c7;
+      }
 
-      #music-toggle {
+      .music {
+        --level: 0;
         position: absolute;
         top: 16px;
         right: 16px;
         z-index: 25;
-        width: 44px;
-        height: 44px;
-        border-radius: 50%;
-        border: 2px solid rgba(77, 225, 255, 0.5);
-        background: rgba(0, 0, 0, 0.5);
-        color: #4de1ff;
-        font-size: 20px;
-        line-height: 1;
-        cursor: pointer;
-        box-shadow: 0 0 16px rgba(77, 225, 255, 0.3);
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        width: 300px;
+        padding: 10px 20px 10px 10px;
+        border-radius: 999px;
+        background: var(--music-glass);
+        border: 1px solid rgba(77, 225, 255, 0.22);
+        -webkit-backdrop-filter: blur(12px);
+        backdrop-filter: blur(12px);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+        color: var(--music-frost);
       }
 
-      #music-toggle:disabled {
-        opacity: 0.4;
+      .music__toggle {
+        position: relative;
+        flex: none;
+        display: grid;
+        place-items: center;
+        width: 52px;
+        height: 52px;
+        padding: 0;
+        border: 0;
+        border-radius: 50%;
+        cursor: pointer;
+        color: var(--music-frost);
+        background: radial-gradient(
+          circle,
+          rgba(255, 143, 193, 0.18),
+          transparent 68%
+        );
+        box-shadow:
+          0 0 calc(4px + var(--level) * 28px)
+            rgba(255, 143, 193, calc(0.12 + var(--level) * 0.6)),
+          inset 0 0 0 1px rgba(77, 225, 255, 0.16);
+        transform: scale(calc(1 + var(--level) * 0.08));
+        transition:
+          transform 90ms linear,
+          background-color 150ms ease;
+      }
+
+      .music__toggle:hover:not(:disabled) {
+        background-color: rgba(255, 255, 255, 0.05);
+      }
+
+      .music__toggle:disabled {
         cursor: not-allowed;
+        opacity: 0.45;
+      }
+
+      /* Cincin 24 titik-garis (pecahan partikel), di-mask jadi annulus tipis di tepi */
+      .music__disc {
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        background: repeating-conic-gradient(
+          var(--music-cyan) 0deg 4deg,
+          transparent 4deg 15deg
+        );
+        -webkit-mask: radial-gradient(
+          farthest-side,
+          transparent calc(100% - 5px),
+          #000 calc(100% - 4.5px)
+        );
+        mask: radial-gradient(
+          farthest-side,
+          transparent calc(100% - 5px),
+          #000 calc(100% - 4.5px)
+        );
+        animation: music-spin 8s linear infinite;
+        animation-play-state: paused;
+      }
+
+      .music[data-state="playing"] .music__disc {
+        animation-play-state: running;
+      }
+
+      @keyframes music-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .music__icon {
+        position: relative;
+        width: 16px;
+        height: 16px;
+        fill: currentColor;
+      }
+
+      .music__icon--pause,
+      .music[data-state="playing"] .music__icon--play {
+        display: none;
+      }
+
+      .music[data-state="playing"] .music__icon--pause {
+        display: block;
+      }
+
+      .music__body {
+        flex: 1;
+        min-width: 0;
+        display: grid;
+        gap: 3px;
+      }
+
+      .music__title {
+        font-family: "Caveat", "Segoe Script", cursive;
+        font-weight: 600;
+        font-size: 23px;
+        line-height: 1;
+        color: var(--music-frost);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .music__meta,
+      .music__hint {
+        font-size: 10.5px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .music__meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        color: var(--music-mist);
+      }
+
+      .music__artist {
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .music__time {
+        flex: none;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .music__hint {
+        display: none;
+        color: var(--music-blush);
+      }
+
+      .music[data-state="idle"] .music__hint,
+      .music[data-state="error"] .music__hint {
+        display: block;
+      }
+
+      .music[data-state="idle"] .music__meta,
+      .music[data-state="idle"] .music__progress,
+      .music[data-state="error"] .music__meta,
+      .music[data-state="error"] .music__progress {
+        display: none;
+      }
+
+      /* Progress bar (input range) — bisa digeser untuk lompat posisi lagu */
+      .music__progress {
+        --progress: 0%;
+        -webkit-appearance: none;
+        appearance: none;
+        width: 100%;
+        height: 14px;
+        margin: 0;
+        background: transparent;
+        cursor: pointer;
+      }
+
+      .music__progress:disabled {
+        cursor: default;
+        opacity: 0.5;
+      }
+
+      .music__progress::-webkit-slider-runnable-track {
+        height: 3px;
+        border-radius: 3px;
+        background: linear-gradient(
+          to right,
+          var(--music-blush) var(--progress),
+          rgba(159, 182, 199, 0.28) var(--progress)
+        );
+      }
+
+      .music__progress::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 10px;
+        height: 10px;
+        margin-top: -3.5px;
+        border-radius: 50%;
+        background: var(--music-frost);
+        box-shadow: 0 0 0 3px rgba(255, 143, 193, 0.35);
+      }
+
+      .music__progress::-moz-range-track {
+        height: 3px;
+        border-radius: 3px;
+        background: rgba(159, 182, 199, 0.28);
+      }
+
+      .music__progress::-moz-range-progress {
+        height: 3px;
+        border-radius: 3px;
+        background: var(--music-blush);
+      }
+
+      .music__progress::-moz-range-thumb {
+        width: 10px;
+        height: 10px;
+        border: 0;
+        border-radius: 50%;
+        background: var(--music-frost);
+        box-shadow: 0 0 0 3px rgba(255, 143, 193, 0.35);
+      }
+
+      .music__toggle:focus-visible,
+      .music__progress:focus-visible {
+        outline: 2px solid var(--music-blush);
+        outline-offset: 3px;
+      }
+
+      @media (max-width: 520px) {
+        .music {
+          top: 12px;
+          right: 12px;
+          left: 12px;
+          width: auto;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .music__disc {
+          animation: none;
+        }
+
+        .music__toggle {
+          transform: none;
+          transition: none;
+        }
       }
     </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
     <div id="app">
       <video id="camera-video" playsinline autoplay muted></video>
       <canvas id="three-canvas"></canvas>
       <div id="status-overlay">INIT...</div>
-      <button id="music-toggle" type="button" aria-label="Putar musik">
-        🔇
-      </button>
+      <section
+        id="music-player"
+        class="music"
+        data-state="idle"
+        aria-label="Pemutar musik"
+      >
+        <button
+          class="music__toggle"
+          type="button"
+          data-music-toggle
+          aria-label="Putar lagu"
+        >
+          <span class="music__disc" aria-hidden="true"></span>
+          <svg
+            class="music__icon music__icon--play"
+            viewBox="0 0 16 16"
+            aria-hidden="true"
+          >
+            <path
+              d="M4.5 2.6v10.8a.6.6 0 0 0 .92.5l8.4-5.4a.6.6 0 0 0 0-1L5.42 2.1a.6.6 0 0 0-.92.5z"
+            />
+          </svg>
+          <svg
+            class="music__icon music__icon--pause"
+            viewBox="0 0 16 16"
+            aria-hidden="true"
+          >
+            <rect x="3.5" y="2.5" width="3" height="11" rx="1" />
+            <rect x="9.5" y="2.5" width="3" height="11" rx="1" />
+          </svg>
+        </button>
+        <div class="music__body">
+          <p class="music__title" data-music-title>Judul Lagu</p>
+          <p class="music__meta">
+            <span class="music__artist" data-music-artist>Nama Penyanyi</span>
+            <span class="music__time" data-music-time>0:00 / 0:00</span>
+          </p>
+          <input
+            class="music__progress"
+            type="range"
+            min="0"
+            max="1000"
+            step="1"
+            value="0"
+            disabled
+            data-music-progress
+            aria-label="Posisi lagu"
+          />
+          <p class="music__hint" data-music-hint aria-live="polite"></p>
+        </div>
+      </section>
       <div id="loading-overlay">SABAR YAA DILLA CANTIK LAGI LOADING...</div>
       <div id="permission-error">
         Akses kamera ditolak atau tidak tersedia.<br />

@@ -31,7 +31,7 @@ const loadingEl = document.getElementById("loading-overlay");
 const errorEl = document.getElementById("permission-error");
 const videoEl = document.getElementById("camera-video");
 const canvasEl = document.getElementById("three-canvas");
-new AudioPlayer(document.getElementById("music-toggle"));
+new AudioPlayer(document.getElementById("music-player"));
 
 const GESTURE_TO_SHAPE = {
   fist: "planet",
@@ -223,7 +223,11 @@ class App {
     // Pakai copy() langsung — smoothing sudah dilakukan oleh One Euro Filter di atas.
     // Lerp/slerp tambahan di titik ini hanya menambah lag berlapis tanpa manfaat.
     this.particleSystem.anchor.position.copy(this.mappedTargetPos);
-    this.particleSystem.anchor.quaternion.copy(this.mappedQuat);
+    if (this.particleSystem.currentShapeName === "text") {
+      this.particleSystem.anchor.quaternion.identity();
+    } else {
+      this.particleSystem.anchor.quaternion.copy(this.mappedQuat);
+    }
 
     this.particleSystem.update(deltaTime, elapsedTime);
 

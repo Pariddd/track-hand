@@ -6,7 +6,13 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
-    <title>DILLA COMEL</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&display=swap"
+      rel="stylesheet"
+    />
+    <title>DILLA & FARID</title>
     <style>
       * {
         margin: 0;
@@ -39,71 +45,345 @@
         z-index: 2;
       }
 
-      /* Camera bubble: terlihat DAN tetap berfungsi sebagai source frame untuk MediaPipe.
-       Tidak ada konflik — video element yang sama bisa dipakai untuk display dan untuk
-       HandLandmarker.detectForVideo() secara bersamaan, karena keduanya hanya MEMBACA
-       frame video, bukan memodifikasinya. */
-      #camera-video {
+      /* ===== Kamera (HUD kiri bawah) =====
+         <video> tetap sumber frame MediaPipe; CSS hanya mengubah tampilannya, bukan frame-nya.
+         Elemen khas: warna bingkai mengikuti bentuk partikel yang aktif (--cam-accent di-set
+         dari src/ui/CameraHud.js). Saat tangan belum terlihat, video meredup & titik berdenyut. */
+      .cam {
+        --cam-accent: #b89eff;
+        --cam-w: 232px;
         position: absolute;
         bottom: 20px;
         left: 20px;
-        z-index: 10;
-        width: 200px;
-        height: 150px;
+        z-index: 15;
+        width: var(--cam-w);
+        color: var(--music-frost);
+      }
+
+      .cam__frame {
+        position: relative;
+        aspect-ratio: 4 / 3;
+        overflow: hidden;
+        border-radius: 18px;
+        background: #05080d;
+        border: 1.5px solid
+          color-mix(in srgb, var(--cam-accent) 65%, transparent);
+        box-shadow:
+          0 0 0 4px color-mix(in srgb, var(--cam-accent) 14%, transparent),
+          0 12px 32px rgba(0, 0, 0, 0.55);
+        transition:
+          border-color 0.6s ease,
+          box-shadow 0.6s ease;
+      }
+
+      #camera-video {
+        display: block;
+        width: 100%;
+        height: 100%;
         object-fit: cover;
+        transform: scaleX(
+          -1
+        ); /* mirror selfie-view; hanya tampilan, MediaPipe membaca frame asli */
+        transition: filter 0.4s ease;
+      }
+
+      .cam[data-presence="none"] #camera-video {
+        filter: saturate(0.35) brightness(0.6);
+      }
+
+      .cam__dot {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--cam-accent);
+        box-shadow: 0 0 0 3px rgba(5, 8, 13, 0.55);
+        transition: background-color 0.6s ease;
+      }
+
+      .cam[data-presence="none"] .cam__dot {
+        background: var(--music-mist);
+        animation: cam-search 1.6s ease-in-out infinite;
+      }
+
+      .cam[data-state="error"] .cam__dot {
+        background: #ff6b6b;
+        animation: none;
+      }
+
+      @keyframes cam-search {
+        50% {
+          opacity: 0.25;
+        }
+      }
+
+      /* Baris 1: ikon + nama bentuk + tombol. Baris 2: status tangan, memakai lebar penuh. */
+      .cam__bar {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        column-gap: 10px;
+        row-gap: 3px;
+        margin-top: 10px;
+        padding: 8px 8px 8px 12px;
         border-radius: 16px;
-        border: 2px solid rgba(77, 225, 255, 0.5);
-        box-shadow: 0 0 24px rgba(77, 225, 255, 0.35);
-        transform: scaleX(-1); /* mirror selfie-view */
-        background: #000;
+        background: var(--music-glass);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        -webkit-backdrop-filter: blur(12px);
+        backdrop-filter: blur(12px);
       }
 
-      #status-overlay {
-        position: absolute;
-        bottom: 16px;
-        left: 16px;
-        z-index: 10;
-        color: #4de1ff;
-        font-size: 12px;
-        letter-spacing: 0.05em;
-        opacity: 0.7;
-        pointer-events: none;
-        text-shadow: 0 0 8px rgba(77, 225, 255, 0.6);
+      .cam__glyph {
+        grid-column: 1;
+        grid-row: 1 / 3;
+        --glyph-accent: var(--cam-accent);
       }
 
-      #loading-overlay {
-        position: absolute;
-        inset: 0;
-        z-index: 20;
-        background: #000;
-        color: #4de1ff;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 14px;
-        letter-spacing: 0.1em;
-        transition: opacity 0.5s ease;
+      .cam__now {
+        display: contents;
       }
 
-      #loading-overlay.hidden {
-        opacity: 0;
-        pointer-events: none;
+      .cam__shape {
+        grid-column: 2;
+        grid-row: 1;
+        min-width: 0;
+        font-family: "Caveat", "Segoe Script", cursive;
+        font-weight: 600;
+        font-size: 22px;
+        line-height: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
-      #permission-error {
-        position: absolute;
-        inset: 0;
-        z-index: 30;
-        background: rgba(0, 0, 0, 0.95);
-        color: #ff6b6b;
+      .cam__hint {
+        grid-column: 2 / 4;
+        grid-row: 2;
+        font-size: 10.5px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--music-mist);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .cam[data-presence="none"] .cam__hint {
+        color: var(--music-blush);
+      }
+
+      .cam[data-state="error"] .cam__hint {
+        color: #ff9b9b;
+        white-space: normal;
+      }
+
+      .cam__toggle {
+        grid-column: 3;
+        grid-row: 1;
+        padding: 7px 11px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: transparent;
+        color: var(--music-frost);
+        font: inherit;
+        font-size: 10.5px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition:
+          background-color 0.15s ease,
+          border-color 0.15s ease;
+      }
+
+      .cam__toggle:hover,
+      .cam[data-guide="open"] .cam__toggle {
+        background: rgba(255, 255, 255, 0.07);
+        border-color: rgba(255, 255, 255, 0.24);
+      }
+
+      .cam__toggle:focus-visible {
+        outline: 2px solid var(--cam-accent);
+        outline-offset: 2px;
+      }
+
+      .cam[data-state="error"] .cam__toggle,
+      .cam[data-state="error"] .cam__glyph {
         display: none;
-        align-items: center;
-        justify-content: center;
-        text-align: center;
-        padding: 24px;
-        font-size: 14px;
-        line-height: 1.6;
       }
+
+      /* Ikon gerakan: 5 batang jari (jempol → kelingking). Batang naik = jari terbuka. */
+      .fingers {
+        display: inline-flex;
+        align-items: flex-end;
+        gap: 2px;
+        height: 18px;
+      }
+
+      .fingers i {
+        width: 3px;
+        height: 5px;
+        border-radius: 2px;
+        background: color-mix(
+          in srgb,
+          var(--glyph-accent, var(--music-mist)) 40%,
+          rgba(159, 182, 199, 0.25)
+        );
+      }
+
+      .fingers i.up {
+        background: var(--glyph-accent, var(--music-frost));
+      }
+      .fingers i.up:nth-child(1) {
+        height: 10px;
+      }
+      .fingers i.up:nth-child(2) {
+        height: 16px;
+      }
+      .fingers i.up:nth-child(3) {
+        height: 18px;
+      }
+      .fingers i.up:nth-child(4) {
+        height: 16px;
+      }
+      .fingers i.up:nth-child(5) {
+        height: 12px;
+      }
+
+      /* Panduan gerakan: muncul di atas kamera, tidak menggeser kamera */
+      .guide {
+        position: absolute;
+        left: 0;
+        bottom: calc(100% + 12px);
+        width: 272px;
+        padding: 14px 10px 8px;
+        border-radius: 18px;
+        background: rgba(6, 12, 20, 0.78);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        -webkit-backdrop-filter: blur(14px);
+        backdrop-filter: blur(14px);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+        max-height: calc(100vh - 330px);
+        overflow-y: auto;
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(8px);
+        transition:
+          opacity 0.25s ease,
+          transform 0.25s ease,
+          visibility 0s linear 0.25s;
+      }
+
+      .cam[data-guide="open"] .guide {
+        opacity: 1;
+        visibility: visible;
+        transform: none;
+        transition:
+          opacity 0.25s ease,
+          transform 0.25s ease;
+      }
+
+      .guide__title {
+        padding: 0 6px;
+        font-family: "Caveat", "Segoe Script", cursive;
+        font-weight: 600;
+        font-size: 24px;
+        line-height: 1;
+      }
+
+      .guide__note {
+        margin: 4px 0 8px;
+        padding: 0 6px;
+        font-size: 11.5px;
+        line-height: 1.4;
+        color: var(--music-mist);
+      }
+
+      .guide__list {
+        list-style: none;
+      }
+
+      .guide__row {
+        --glyph-accent: var(--row-accent);
+        display: grid;
+        grid-template-columns: 26px 1fr auto;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 6px;
+        border-radius: 10px;
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      .guide__gesture {
+        font-size: 12px;
+        color: var(--music-mist);
+      }
+
+      .guide__result {
+        font-family: "Caveat", "Segoe Script", cursive;
+        font-weight: 600;
+        font-size: 19px;
+        line-height: 1;
+        text-align: right;
+      }
+
+      .guide__row[aria-current="true"] {
+        border-top-color: transparent;
+        background: color-mix(in srgb, var(--row-accent) 13%, transparent);
+      }
+
+      .guide__row[aria-current="true"] + .guide__row {
+        border-top-color: transparent;
+      }
+
+      .guide__row[aria-current="true"] .guide__gesture {
+        color: var(--music-frost);
+      }
+
+      .guide__row[aria-current="true"] .guide__result {
+        color: var(--row-accent);
+      }
+
+      @media (max-width: 520px) {
+        .cam {
+          --cam-w: 136px;
+          bottom: 12px;
+          left: 12px;
+        }
+
+        .cam__frame {
+          border-radius: 14px;
+        }
+
+        .cam__bar {
+          width: calc(100vw - 24px);
+          max-width: 300px;
+        }
+
+        .guide {
+          width: calc(100vw - 24px);
+          max-width: 320px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .cam__frame,
+        .cam__dot,
+        .guide,
+        .cam[data-guide="open"] .guide,
+        #camera-video {
+          transition: none;
+        }
+
+        .cam[data-presence="none"] .cam__dot {
+          animation: none;
+        }
+      }
+
+      /* ===== Pemutar musik =====
+         Kapsul kaca di pojok kanan atas. Elemen khas: piringan titik yang berputar saat lagu
+         jalan dan berpendar mengikuti bass (--level di-set dari AudioPlayer.js, 0..1). */
       :root {
         --music-glass: rgba(6, 12, 20, 0.62);
         --music-cyan: #4de1ff;
@@ -361,19 +641,81 @@
           transition: none;
         }
       }
+
+      #loading-overlay {
+        position: absolute;
+        inset: 0;
+        z-index: 20;
+        background: #000;
+        color: #4de1ff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        letter-spacing: 0.1em;
+        transition: opacity 0.5s ease;
+      }
+
+      #loading-overlay.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      #permission-error {
+        position: absolute;
+        inset: 0;
+        z-index: 30;
+        background: rgba(0, 0, 0, 0.95);
+        color: #ff6b6b;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 24px;
+        font-size: 14px;
+        line-height: 1.6;
+      }
     </style>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&display=swap"
-      rel="stylesheet"
-    />
   </head>
   <body>
     <div id="app">
-      <video id="camera-video" playsinline autoplay muted></video>
       <canvas id="three-canvas"></canvas>
-      <div id="status-overlay">INIT...</div>
+      <section
+        id="camera-hud"
+        class="cam"
+        data-state="loading"
+        data-presence="none"
+        data-guide="closed"
+        aria-label="Kamera"
+      >
+        <div class="guide" id="cam-guide" data-cam-guide>
+          <p class="guide__title">Gerakan tangan</p>
+          <p class="guide__note">
+            Tahan gerakan sebentar sampai partikelnya berubah.
+          </p>
+          <ul class="guide__list" data-cam-list></ul>
+        </div>
+        <div class="cam__frame">
+          <video id="camera-video" playsinline autoplay muted></video>
+          <span class="cam__dot" aria-hidden="true"></span>
+        </div>
+        <div class="cam__bar">
+          <span class="cam__glyph" data-cam-glyph role="img"></span>
+          <div class="cam__now" aria-live="polite">
+            <p class="cam__shape" data-cam-shape></p>
+            <p class="cam__hint" data-cam-hint>Menyiapkan kamera</p>
+          </div>
+          <button
+            class="cam__toggle"
+            type="button"
+            data-cam-toggle
+            aria-controls="cam-guide"
+            aria-expanded="false"
+          >
+            <span data-cam-toggle-label>Gerakan</span>
+          </button>
+        </div>
+      </section>
       <section
         id="music-player"
         class="music"
@@ -428,7 +770,7 @@
       <div id="loading-overlay">SABAR YAA DILLA CANTIK LAGI LOADING...</div>
       <div id="permission-error">
         Akses kamera ditolak atau tidak tersedia.<br />
-        Idupin kamera duluu yaa dillaa...
+        Pastikan browser memiliki izin kamera
       </div>
     </div>
 

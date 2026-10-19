@@ -15,6 +15,10 @@ import { GestureStateMachine } from "./gestures/GestureStateMachine.js";
 import { ParticleSystem } from "./particles/ParticleSystem.js";
 import { BloomComposer } from "./effects/BloomComposer.js";
 import { AudioPlayer } from "./audio/AudioPlayer.js";
+import { CameraHud } from "./ui/CameraHud.js";
+// Font tulisan tangan Caveat DIBUNDEL ke project (bukan dari Google Fonts), supaya pasti
+// tersedia saat teks partikel digambar ke canvas, termasuk saat offline.
+// 600 = judul lagu di pemutar musik, 700 = teks partikel.
 import "@fontsource/caveat/600.css";
 import "@fontsource/caveat/700.css";
 
@@ -28,13 +32,23 @@ import "@fontsource/caveat/700.css";
  * (lihat analisis performa sebelumnya).
  */
 
-const statusEl = document.getElementById("status-overlay");
 const loadingEl = document.getElementById("loading-overlay");
 const errorEl = document.getElementById("permission-error");
 const videoEl = document.getElementById("camera-video");
 const canvasEl = document.getElementById("three-canvas");
+
+// Musik latar. Diinisialisasi di luar App.init() supaya tombol & listener interaksi-pertama
+// sudah aktif sejak halaman dibuka, tidak menunggu kamera/model selesai dimuat.
 new AudioPlayer(document.getElementById("music-player"));
 
+// Bingkai kamera, keterangan bentuk aktif & panduan gerakan (lihat src/ui/CameraHud.js)
+const hud = new CameraHud(document.getElementById("camera-hud"));
+
+/**
+ * Tunggu font Caveat siap dipakai canvas. Teks partikel digambar SEKALI saat partikel dibuat,
+ * jadi kalau font belum termuat, canvas memakai font cadangan dan hasilnya tidak berubah lagi.
+ * Dibatasi waktu (timeout) supaya halaman tidak pernah tertahan di layar loading.
+ */
 async function waitForFonts(timeoutMs = 3000) {
   if (!document.fonts || !document.fonts.load) return;
   const timeout = new Promise((resolve) => setTimeout(resolve, timeoutMs));
@@ -44,6 +58,8 @@ async function waitForFonts(timeoutMs = 3000) {
     console.warn("[App] Font Caveat gagal dimuat, memakai font cadangan:", err);
   }
 }
+
+const IDENTITY_QUAT = new THREE.Quaternion();
 
 const GESTURE_TO_SHAPE = {
   fist: "planet",
@@ -73,45 +89,54 @@ class App {
     );
 
     this.handVisible = false;
+    // 0 = ikut rotasi tangan, 1 = menghadap kamera lurus. Dipakai untuk teks (lihat _renderLoop).
+    this.textLock = 0;
     this._rawPalmPos = new THREE.Vector3();
     this._rawQuat = new THREE.Quaternion();
   }
 
   async init() {
-    await waitForFonts();
+    await waitForFonts(); // HARUS sebelum _initParticles() (teks partikel dibuat di sana)
     this._initScene();
     this._initParticles();
     this._initPostProcessing();
 
     this.gestureStateMachine = new GestureStateMachine((newState) => {
       const targetShape = GESTURE_TO_SHAPE[newState];
-      if (targetShape) this.particleSystem.morphTo(targetShape);
+      if (!targetShape) return;
+      this.particleSystem.morphTo(targetShape);
+      hud.setShape(targetShape);
     });
 
     try {
-      statusEl.textContent = "MEMINTA IZIN KAMERA...";
       this.videoStream = new VideoStream(videoEl);
       await this.videoStream.start();
     } catch (err) {
       console.error("[App] Gagal mengakses kamera:", err);
+      hud.error(
+        "Kamera tidak aktif",
+        "Izinkan akses kamera, lalu muat ulang halaman",
+      );
       errorEl.style.display = "flex";
       loadingEl.classList.add("hidden");
       return;
     }
 
     try {
-      statusEl.textContent = "MEMUAT MODEL HAND LANDMARKER...";
       this.handTracker = new HandTracker();
       await this.handTracker.init();
     } catch (err) {
       console.error("[App] Gagal inisialisasi HandLandmarker:", err);
-      statusEl.textContent = "GAGAL MEMUAT MODEL TRACKING";
+      hud.error(
+        "Pelacak tangan gagal dimuat",
+        "Periksa koneksi internet, lalu muat ulang halaman",
+      );
       loadingEl.classList.add("hidden");
       return;
     }
 
     loadingEl.classList.add("hidden");
-    statusEl.textContent = "";
+    hud.ready();
 
     window.addEventListener("resize", () => this._onResize());
 
@@ -190,6 +215,7 @@ class App {
 
     if (!result || !result.landmarks || result.landmarks.length === 0) {
       this.handVisible = false;
+      hud.setHandVisible(false);
       // Tangan hilang dari frame -> JANGAN reset gesture state paksa ke 'none' secara instan.
       // GestureStateMachine tetap menerima 'none' sebagai candidate, tapi baru benar2 berubah
       // setelah CONFIRM_FRAMES — ini mencegah morph balik ke shape default hanya karena
@@ -199,6 +225,7 @@ class App {
     }
 
     this.handVisible = true;
+    hud.setHandVisible(true);
     const landmarks = result.landmarks[0]; // NUM_HANDS = 1, ambil tangan pertama
 
     computePalmCenter(landmarks, this._rawPalmPos);
@@ -236,11 +263,20 @@ class App {
     // Pakai copy() langsung — smoothing sudah dilakukan oleh One Euro Filter di atas.
     // Lerp/slerp tambahan di titik ini hanya menambah lag berlapis tanpa manfaat.
     this.particleSystem.anchor.position.copy(this.mappedTargetPos);
-    if (this.particleSystem.currentShapeName === "text") {
-      this.particleSystem.anchor.quaternion.identity();
-    } else {
-      this.particleSystem.anchor.quaternion.copy(this.mappedQuat);
-    }
+
+    // Teks ("Semangat Dilla...") TIDAK ikut rotasi tangan supaya selalu enak dibaca.
+    // textLock dibawa halus ke 0/1 (exponential smoothing, ~0.3 dtk) lalu dipakai untuk slerp
+    // antara rotasi tangan dan rotasi identitas (menghadap kamera). Saat textLock = 0, hasilnya
+    // persis rotasi tangan (tanpa lag tambahan); saat 1, teks diam menghadap kamera.
+    const lockTarget = this.particleSystem.currentShapeName === "text" ? 1 : 0;
+    this.textLock +=
+      (lockTarget - this.textLock) * (1 - Math.exp(-deltaTime * 10));
+    if (Math.abs(lockTarget - this.textLock) < 1e-3) this.textLock = lockTarget;
+    this.particleSystem.anchor.quaternion.slerpQuaternions(
+      this.mappedQuat,
+      IDENTITY_QUAT,
+      this.textLock,
+    );
 
     this.particleSystem.update(deltaTime, elapsedTime);
 

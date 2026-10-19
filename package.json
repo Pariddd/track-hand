@@ -9,9 +9,10 @@
     "postinstall": "chmod +x ./node_modules/.bin/*"
   },
   "dependencies": {
-    "three": "0.170.0",
+    "@fontsource/caveat": "^5.2.8",
     "@mediapipe/tasks-vision": "0.10.17",
-    "gsap": "3.12.5"
+    "gsap": "3.12.5",
+    "three": "0.170.0"
   },
   "devDependencies": {
     "vite": "5.4.10"

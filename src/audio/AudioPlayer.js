@@ -13,8 +13,8 @@
 // >>> GANTI SESUAI LAGU ANDA <<<
 // File di folder public/ disajikan dari root: "public/audio/lagu.mp3" -> "/audio/lagu.mp3".
 const SONG = {
-  url: "/audio/laghua.mp3",
-  title: "Beautiful",
+  url: "/audio/lagu.mp3",
+  title: "Best Friend",
   artist: "Parid Soft Spoken",
 };
 const DEFAULT_VOLUME = 0.5; // 0.0 - 1.0

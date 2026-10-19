@@ -15,6 +15,8 @@ import { GestureStateMachine } from "./gestures/GestureStateMachine.js";
 import { ParticleSystem } from "./particles/ParticleSystem.js";
 import { BloomComposer } from "./effects/BloomComposer.js";
 import { AudioPlayer } from "./audio/AudioPlayer.js";
+import "@fontsource/caveat/600.css";
+import "@fontsource/caveat/700.css";
 
 /**
  * main.js
@@ -32,6 +34,16 @@ const errorEl = document.getElementById("permission-error");
 const videoEl = document.getElementById("camera-video");
 const canvasEl = document.getElementById("three-canvas");
 new AudioPlayer(document.getElementById("music-player"));
+
+async function waitForFonts(timeoutMs = 3000) {
+  if (!document.fonts || !document.fonts.load) return;
+  const timeout = new Promise((resolve) => setTimeout(resolve, timeoutMs));
+  try {
+    await Promise.race([document.fonts.load('700 100px "Caveat"'), timeout]);
+  } catch (err) {
+    console.warn("[App] Font Caveat gagal dimuat, memakai font cadangan:", err);
+  }
+}
 
 const GESTURE_TO_SHAPE = {
   fist: "planet",
@@ -66,6 +78,7 @@ class App {
   }
 
   async init() {
+    await waitForFonts();
     this._initScene();
     this._initParticles();
     this._initPostProcessing();

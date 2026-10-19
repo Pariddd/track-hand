@@ -1,7 +1,10 @@
 import * as THREE from "three";
 import gsap from "gsap";
 import { Config } from "../utils/Config.js";
-import { generatePlanetPositions } from "../shapes/PlanetShape.js";
+import {
+  generatePlanetPositions,
+  orbitPlanetPositions,
+} from "../shapes/PlanetShape.js";
 import { generateTextPositions } from "../shapes/TextShape.js";
 import { generateHeartPositions } from "../shapes/HeartShape.js";
 import { generateScatterPositions } from "../shapes/ScatterShape.js";
@@ -11,39 +14,62 @@ import { generateButterflyPositions } from "../shapes/ButterflyShape.js";
 import vertexShader from "../shaders/particle.vert.glsl?raw";
 import fragmentShader from "../shaders/particle.frag.glsl?raw";
 
+// Durasi efek "sedang ditulis" saat berpindah ke teks (detik). Lebih lama dari morph biasa
+// karena huruf tersusun bertahap mengikuti urutan baca. Harus sinkron dengan shader
+// (WRITE_SPREAD & WRITE_TAIL di particle.vert.glsl).
+const TEXT_WRITE_DURATION = 3.2;
+
 /**
  * ParticleSystem.js
  *
- * Mengelola satu BufferGeometry + ShaderMaterial untuk SEMUA shape (planet/text/heart).
+ * Mengelola satu BufferGeometry + ShaderMaterial untuk SEMUA shape.
  * Morph antar shape dilakukan dengan menukar attribute positionA/positionB lalu
  * men-tween SATU uniform scalar (uMorphProgress) via GSAP — bukan tween per-vertex.
  *
- * PENTING: ketiga shape (planet, text, heart) di-generate dengan COUNT PARTIKEL YANG SAMA
- * (Config.particles.COUNT) agar index-based morph valid (lihat shapes/*.js untuk detail
- * strategi oversampling yang dipakai text & heart untuk mencapai parity ini).
+ * PENTING: semua shape di-generate dengan COUNT PARTIKEL YANG SAMA
+ * (Config.particles.COUNT) agar index-based morph valid.
  */
 export class ParticleSystem {
   constructor(scene) {
     this.scene = scene;
     this.count = Config.particles.COUNT;
 
-    // Bunga mawar mengembalikan posisi + kategori warna (petal/stem/leaf) + shade per partikel.
-    // Kategori & shade statis per index (tidak ikut morph) dan dipakai shader untuk warna.
+    // Bunga mawar: posisi + kategori warna + shade per partikel
     const flowerData = generateFlowerPositions(this.count);
+    // Hati: posisi + shade per partikel (0 = inti, 1 = tepi) untuk gradasi warna bara
+    const heartData = generateHeartPositions(this.count);
+    // Planet: posisi + bagian (badan/atmosfer/cincin/bulan) + kecepatan orbit + shade
+    const planetData = generatePlanetPositions(this.count);
+    // Kupu-kupu: posisi + bagian (badan/sayap/urat/tepi/bintik/antena) + shade corak
+    const butterflyData = generateButterflyPositions(this.count);
+    // Teks: posisi + peran (pesan / baris penutup / ikon hati) + urutan baca untuk efek menulis
+    const textData = generateTextPositions(
+      this.count,
+      "Semangat Dilla\nPPL sama KPM-nya yaa\nkalo cape inget Farid yaa\nwkwkw\nLOVE YOU CANTIKKK <3",
+    );
 
     this.shapes = {
-      planet: generatePlanetPositions(this.count),
-      text: generateTextPositions(
-        this.count,
-        "Semangat Dilla\nPPL sama KPM-nya yaa\nkalo cape inget Farid yaa\nwkwkw\nLOVE YOU CANTIKKK <3",
-      ),
-      heart: generateHeartPositions(this.count),
+      planet: planetData.positions,
+      text: textData.positions,
+      heart: heartData.positions,
       scatter: generateScatterPositions(this.count),
       flower: flowerData.positions,
-      butterfly: generateButterflyPositions(this.count),
+      butterfly: butterflyData.positions,
     };
     this.flowerCategories = flowerData.categories;
     this.flowerShades = flowerData.shades;
+    this.heartShades = heartData.shades;
+    this.planetParts = planetData.parts;
+    this.planetOrbits = planetData.orbits;
+    this.planetShades = planetData.shades;
+    this.planetRingAxis = planetData.ringAxis;
+    this.planetMoonCenter = planetData.moonCenter;
+    this.butterflyParts = butterflyData.parts;
+    this.butterflyShades = butterflyData.shades;
+    this.textRoles = textData.roles;
+    this.textOrders = textData.orders;
+    // Waktu orbit cincin: hanya bertambah selama planet tampil (lihat update())
+    this.planetOrbitTime = 0;
 
     this.currentShapeName = "planet";
     this._morphTween = null;
@@ -54,8 +80,6 @@ export class ParticleSystem {
     this.points = new THREE.Points(this.geometry, this.material);
 
     // Group pembungkus untuk transform posisi & rotasi tangan (lihat main.js).
-    // Points HANYA child dari anchor, tidak pernah ditambahkan langsung ke scene,
-    // supaya transform posisi/rotasi tangan cukup diterapkan sekali di level anchor.
     this.anchor = new THREE.Group();
     this.anchor.add(this.points);
     this.scene.add(this.anchor);
@@ -89,7 +113,7 @@ export class ParticleSystem {
       new THREE.BufferAttribute(randomSeed, 1),
     );
 
-    // Atribut warna bunga (statis): kategori 0=kelopak, 1=tangkai, 2=daun + shade gradasi
+    // Atribut statis per shape (tidak ikut morph posisi), dipakai shader untuk warna & efek
     this.geometry.setAttribute(
       "flowerCategory",
       new THREE.BufferAttribute(this.flowerCategories, 1),
@@ -98,9 +122,40 @@ export class ParticleSystem {
       "flowerShade",
       new THREE.BufferAttribute(this.flowerShades, 1),
     );
+    this.geometry.setAttribute(
+      "heartShade",
+      new THREE.BufferAttribute(this.heartShades, 1),
+    );
+    this.geometry.setAttribute(
+      "planetPart",
+      new THREE.BufferAttribute(this.planetParts, 1),
+    );
+    this.geometry.setAttribute(
+      "planetOrbit",
+      new THREE.BufferAttribute(this.planetOrbits, 1),
+    );
+    this.geometry.setAttribute(
+      "planetShade",
+      new THREE.BufferAttribute(this.planetShades, 1),
+    );
+    this.geometry.setAttribute(
+      "butterflyPart",
+      new THREE.BufferAttribute(this.butterflyParts, 1),
+    );
+    this.geometry.setAttribute(
+      "butterflyShade",
+      new THREE.BufferAttribute(this.butterflyShades, 1),
+    );
+    this.geometry.setAttribute(
+      "textRole",
+      new THREE.BufferAttribute(this.textRoles, 1),
+    );
+    this.geometry.setAttribute(
+      "textOrder",
+      new THREE.BufferAttribute(this.textOrders, 1),
+    );
 
-    // Bounding sphere manual (cukup besar untuk cover semua shape) agar Three.js tidak
-    // salah frustum-cull object ini padahal sebenarnya masih di dalam view tangan.
+    // Bounding sphere manual (cukup besar untuk cover semua shape)
     this.geometry.boundingSphere = new THREE.Sphere(
       new THREE.Vector3(0, 0, 0),
       3.0,
@@ -113,32 +168,40 @@ export class ParticleSystem {
       fragmentShader,
       transparent: true,
       depthWrite: false, // penting untuk blending partikel transparan yang saling overlap
-      blending: THREE.AdditiveBlending, // additive -> kesan glow neon saat partikel overlap
+      blending: THREE.AdditiveBlending,
       uniforms: {
-        uMorphProgress: { value: 0 },
+        // 1 di awal: positionA = positionB = planet, dan orbit planet diterapkan ke positionB,
+        // jadi nilai 1 membuat cincin langsung mengorbit sejak halaman dibuka.
+        uMorphProgress: { value: 1 },
         uTime: { value: 0 },
         uBaseSize: { value: Config.particles.BASE_SIZE },
         uPulseAmount: { value: 0 }, // di-set 1 saat shape aktif = heart
         uWaveAmount: { value: 0 }, // di-set >0 saat shape aktif = text
-        // Multiplier turbulence dasar (0.02 di shader). Dinaikkan saat shape aktif = scatter
-        // agar partikel terlihat terus "melayang menjauh/bergejolak" alih-alih diam statis
-        // di posisi hasil morph — memperkuat kesan "menyebar" yang diminta, bukan cuma
-        // perubahan bentuk sesaat. Default 1.0 = turbulence dasar tidak berubah utk shape lain.
-        uTurbulenceAmount: { value: 1.0 },
-        // 0..1: blend dari warna neon biru ke warna mawar (merah/hijau). Di-tween saat shape = flower.
+        uTurbulenceAmount: { value: 1.0 }, // dinaikkan saat shape aktif = scatter
+        // 0..1: blend ke warna mawar. Di-tween saat shape = flower.
         uFlowerColorAmount: { value: 0 },
+        // 0..1: blend ke warna hati (bara merah). Di-tween saat shape = heart.
+        uHeartColorAmount: { value: 0 },
+        // Planet adalah shape awal, jadi warna & orbitnya aktif sejak mula (nilai 1).
+        uPlanetAmount: { value: 1 },
+        uOrbitOn: { value: 1 }, // 1 = cincin & bulan mengorbit (hanya saat target = planet)
+        uPlanetTime: { value: 0 }, // detik orbit yang sudah berjalan
+        uRingAxis: { value: new THREE.Vector3(...this.planetRingAxis) },
+        uMoonCenter: { value: new THREE.Vector3(...this.planetMoonCenter) },
+        // Teks: 1 = efek "sedang ditulis" aktif (hanya saat target = teks), warna teks 0..1
+        uWriteAmount: { value: 0 },
+        uTextColorAmount: { value: 0 },
+        // Kupu-kupu: 0..1 blend ke warna kupu-kupu, dan 0..1 kekuatan kepakan sayap.
         uButterflyColorAmount: { value: 0 },
         uFlapAmount: { value: 0 },
-        // Diinisialisasi dengan window.innerHeight saat ini; WAJIB di-update tiap resize
-        // via setViewportHeight(), kalau tidak point size akan salah proporsi setelah resize window.
+        // WAJIB di-update tiap resize via setViewportHeight()
         uViewportHeight: { value: window.innerHeight },
       },
     });
   }
 
   /**
-   * Dipanggil dari main.js saat window resize agar gl_PointSize tetap perspective-correct
-   * terhadap dimensi viewport terbaru.
+   * Dipanggil dari main.js saat window resize agar gl_PointSize tetap perspective-correct.
    */
   setViewportHeight(height) {
     this.material.uniforms.uViewportHeight.value = height;
@@ -146,7 +209,7 @@ export class ParticleSystem {
 
   /**
    * Trigger morph ke shape baru. Dipanggil dari main.js saat GestureStateMachine emit 'change'.
-   * @param {string} targetShapeName - 'planet' | 'text' | 'heart' | 'scatter' | 'flower'
+   * @param {string} targetShapeName - 'planet' | 'text' | 'heart' | 'scatter' | 'flower' | 'butterfly'
    */
   morphTo(targetShapeName) {
     if (targetShapeName === this.currentShapeName) return;
@@ -157,11 +220,31 @@ export class ParticleSystem {
       return;
     }
 
-    // Ambil posisi hasil interpolasi SAAT INI sebagai titik awal morph baru
-    // (bukan selalu dari shape asli), agar kalau user ganti gesture di tengah animasi morph
-    // sebelumnya, transisi tetap smooth dari posisi visual terkini, tidak "loncat".
     const posAttr = this.geometry.attributes.position;
-    const currentInterpolated = new Float32Array(posAttr.array); // snapshot posisi saat ini
+    let currentInterpolated;
+    if (this.currentShapeName === "planet") {
+      // Cincin & bulan sedang mengorbit di shader, jadi posisi yang TERLIHAT bukan posisi
+      // statis. Hitung posisi orbit saat ini di CPU supaya morph mulai dari sana.
+      currentInterpolated = orbitPlanetPositions(
+        this.shapes.planet,
+        this.planetOrbits,
+        this.planetParts,
+        this.planetRingAxis,
+        this.planetMoonCenter,
+        this.planetOrbitTime,
+        new Float32Array(this.count * 3),
+      );
+    } else {
+      currentInterpolated = new Float32Array(posAttr.array); // snapshot posisi saat ini
+    }
+
+    // Orbit hanya diterapkan pada target = planet. Diset langsung (bukan di-tween) karena
+    // posisi awal sudah memperhitungkan orbit saat ini.
+    this.material.uniforms.uOrbitOn.value =
+      targetShapeName === "planet" ? 1 : 0;
+    // Efek menulis hanya untuk morph MENUJU teks; diset langsung, bukan di-tween.
+    const isText = targetShapeName === "text";
+    this.material.uniforms.uWriteAmount.value = isText ? 1 : 0;
 
     this.geometry.attributes.positionA.array.set(currentInterpolated);
     this.geometry.attributes.positionA.needsUpdate = true;
@@ -175,11 +258,11 @@ export class ParticleSystem {
 
     this._morphTween = gsap.to(this.material.uniforms.uMorphProgress, {
       value: 1,
-      duration: Config.particles.MORPH_DURATION,
-      // sine.inOut: kurva akselerasi/deselerasi paling landai di antara easing standar GSAP
-      // (tidak ada overshoot maupun perubahan kecepatan mendadak di tengah transisi seperti
-      // power2.inOut), dipilih ulang khusus supaya morph terasa lebih "mengalir".
-      ease: "sine.inOut",
+      duration: isText ? TEXT_WRITE_DURATION : Config.particles.MORPH_DURATION,
+      // sine.inOut: kurva paling landai -> morph terasa "mengalir".
+      // Teks: linear, supaya "pena" menulis dengan kecepatan tetap; tiap huruf sudah punya
+      // easing sendiri di shader.
+      ease: isText ? "none" : "sine.inOut",
       onUpdate: () => this._syncPositionAttributeForCulling(),
       onComplete: () => this._syncPositionAttributeForCulling(),
     });
@@ -189,15 +272,10 @@ export class ParticleSystem {
   }
 
   /**
-   * Attribute `position` bawaan Three.js dipakai untuk bounding sphere/raycasting,
-   * TAPI posisi visual sebenarnya dihitung di vertex shader dari positionA/positionB.
-   * Sinkronisasi ringan ini hanya untuk snapshot morphTo() berikutnya (lihat di atas),
-   * BUKAN untuk render — render selalu pakai shader, bukan attribute `position` langsung.
-   * Sengaja tidak update tiap frame (mahal), cukup saat morph selesai.
+   * Attribute `position` hanya dipakai untuk snapshot morphTo() berikutnya, BUKAN untuk
+   * render (render selalu lewat shader dari positionA/positionB).
    */
   _syncPositionAttributeForCulling() {
-    // No-op berat sengaja dihindari di sini. Snapshot cukup diambil saat morphTo() dipanggil
-    // dari nilai positionB shape sebelumnya jika progress sudah 1. Implementasi minimal:
     if (this.material.uniforms.uMorphProgress.value >= 1) {
       const posAttr = this.geometry.attributes.position;
       posAttr.array.set(this.geometry.attributes.positionB.array);
@@ -206,20 +284,14 @@ export class ParticleSystem {
   }
 
   _setShapeEffects(shapeName) {
-    // Efek khusus per-shape sesuai spek: heartbeat pulse utk heart, wave utk text,
-    // turbulence boost utk scatter (lihat komentar uniform uTurbulenceAmount di _buildMaterial).
-    //
-    // Ease disamakan ke 'sine.inOut' dan duration ke 0.6s (sebelumnya: tanpa ease eksplisit
-    // -> default GSAP 'power1.out', dan duration 0.4s berbeda dari morph utama 1.0s).
-    // Mismatch ease/duration antar tween yang jalan BERSAMAAN inilah yang membuat animasi
-    // terasa tidak "smooth" secara keseluruhan — morph posisi melandai halus, tapi efek
-    // sekunder (pulse/wave/turbulence) berhenti duluan dengan kurva berbeda, jadi terasa
-    // seperti dua animasi terpisah yang kebetulan tumpang tindih, bukan satu transisi utuh.
+    // Semua tween efek memakai sine.inOut / 0.6s agar terasa satu transisi utuh.
     gsap.to(this.material.uniforms.uPulseAmount, {
       value: shapeName === "heart" ? 1 : 0,
       duration: 0.6,
       ease: "sine.inOut",
     });
+    // Teks: gelombang & turbulence dikecilkan supaya goresan huruf tetap tegas,
+    // dan ukuran titik diperbesar karena teks besar membuat partikel lebih renggang.
     const isText = shapeName === "text";
     gsap.to(this.material.uniforms.uWaveAmount, {
       value: isText ? 0.012 : 0,
@@ -235,6 +307,21 @@ export class ParticleSystem {
       value: isText
         ? Config.particles.BASE_SIZE * 1.3
         : Config.particles.BASE_SIZE,
+      duration: 0.6,
+      ease: "sine.inOut",
+    });
+    gsap.to(this.material.uniforms.uTextColorAmount, {
+      value: isText ? 1 : 0,
+      duration: 0.6,
+      ease: "sine.inOut",
+    });
+    gsap.to(this.material.uniforms.uPlanetAmount, {
+      value: shapeName === "planet" ? 1 : 0,
+      duration: 0.6,
+      ease: "sine.inOut",
+    });
+    gsap.to(this.material.uniforms.uHeartColorAmount, {
+      value: shapeName === "heart" ? 1 : 0,
       duration: 0.6,
       ease: "sine.inOut",
     });
@@ -258,9 +345,20 @@ export class ParticleSystem {
   update(deltaTime, elapsedTime) {
     this.material.uniforms.uTime.value = elapsedTime;
 
-    // Rotasi lambat konstan untuk planet (spek: "animasi rotasi perlahan")
+    // Waktu orbit cincin & bulan planet hanya maju saat planet tampil.
     if (this.currentShapeName === "planet") {
-      this.points.rotation.y += deltaTime * 0.15;
+      this.planetOrbitTime += deltaTime;
+      this.material.uniforms.uPlanetTime.value = this.planetOrbitTime;
+    }
+
+    // Rotasi Points tidak dipakai lagi. Kembalikan sisa rotasi lama (jika ada) ke 0
+    // agar semua shape menghadap kamera.
+    if (this.points.rotation.y !== 0) {
+      const TWO_PI = Math.PI * 2;
+      const r = ((this.points.rotation.y % TWO_PI) + TWO_PI) % TWO_PI;
+      const target = r > Math.PI ? TWO_PI : 0;
+      const next = r + (target - r) * Math.min(1, deltaTime * 4);
+      this.points.rotation.y = Math.abs(target - next) < 0.001 ? 0 : next;
     }
   }
 

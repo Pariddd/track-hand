@@ -104,6 +104,28 @@
         font-size: 14px;
         line-height: 1.6;
       }
+
+      #music-toggle {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        z-index: 25;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        border: 2px solid rgba(77, 225, 255, 0.5);
+        background: rgba(0, 0, 0, 0.5);
+        color: #4de1ff;
+        font-size: 20px;
+        line-height: 1;
+        cursor: pointer;
+        box-shadow: 0 0 16px rgba(77, 225, 255, 0.3);
+      }
+
+      #music-toggle:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
     </style>
   </head>
   <body>
@@ -111,6 +133,9 @@
       <video id="camera-video" playsinline autoplay muted></video>
       <canvas id="three-canvas"></canvas>
       <div id="status-overlay">INIT...</div>
+      <button id="music-toggle" type="button" aria-label="Putar musik">
+        🔇
+      </button>
       <div id="loading-overlay">SABAR YAA DILLA CANTIK LAGI LOADING...</div>
       <div id="permission-error">
         Akses kamera ditolak atau tidak tersedia.<br />

@@ -14,6 +14,7 @@ import { classifyGesture } from "./gestures/GestureClassifier.js";
 import { GestureStateMachine } from "./gestures/GestureStateMachine.js";
 import { ParticleSystem } from "./particles/ParticleSystem.js";
 import { BloomComposer } from "./effects/BloomComposer.js";
+import { AudioPlayer } from "./audio/AudioPlayer.js";
 
 /**
  * main.js
@@ -30,6 +31,7 @@ const loadingEl = document.getElementById("loading-overlay");
 const errorEl = document.getElementById("permission-error");
 const videoEl = document.getElementById("camera-video");
 const canvasEl = document.getElementById("three-canvas");
+new AudioPlayer(document.getElementById("music-toggle"));
 
 const GESTURE_TO_SHAPE = {
   fist: "planet",
